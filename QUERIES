@@ -1,0 +1,141 @@
+1. Активные счета в EUR, открытые после 2024-01-01, отсортировать по дате открытия
+
+SELECT *
+FROM accounts
+WHERE status = 'active'
+  AND currency = 'EUR'
+  AND opened_at > DATE '2024-01-01'
+ORDER BY opened_at;
+
+2. ФИО клиента, тип счета, валюту и статус счета
+SELECT
+    c.full_name,
+    a.account_type,
+    a.currency,
+    a.status
+FROM accounts a
+JOIN clients c ON c.client_id = a.client_id;
+
+3. Все клиенты и количество их счетов (включая 0)
+SELECT
+    c.client_id,
+    c.full_name,
+    COUNT(a.account_id) AS account_count
+FROM clients c
+LEFT JOIN accounts a ON a.client_id = c.client_id
+GROUP BY c.client_id, c.full_name
+ORDER BY c.client_id;
+
+4. Клиенты, у которых больше 2 активных счетов
+SELECT
+    c.client_id,
+    c.full_name,
+    COUNT(a.account_id) AS active_accounts
+FROM clients c
+JOIN accounts a ON a.client_id = c.client_id
+WHERE a.status = 'active'
+GROUP BY c.client_id, c.full_name
+HAVING COUNT(a.account_id) > 2;
+
+5. Счета, у которых сумма входящих операций выше среднего по банку
+
+(входящие = deposit + transfer_in)
+
+WITH incoming_per_account AS (
+    SELECT
+        account_id,
+        SUM(amount) AS incoming_sum
+    FROM transactions
+    WHERE txn_type IN ('deposit', 'transfer_in')
+    GROUP BY account_id
+),
+avg_incoming AS (
+    SELECT AVG(incoming_sum) AS avg_sum
+    FROM incoming_per_account
+)
+SELECT ipa.account_id, ipa.incoming_sum
+FROM incoming_per_account ipa
+CROSS JOIN avg_incoming ai
+WHERE ipa.incoming_sum > ai.avg_sum;
+
+6. Топ-5 клиентов по сумме всех операций за 2025 год (оборот)
+SELECT
+    c.client_id,
+    c.full_name,
+    SUM(t.amount) AS total_turnover
+FROM clients c
+JOIN accounts a ON a.client_id = c.client_id
+JOIN transactions t ON t.account_id = a.account_id
+WHERE t.txn_date >= TIMESTAMP '2025-01-01'
+  AND t.txn_date <  TIMESTAMP '2026-01-01'
+GROUP BY c.client_id, c.full_name
+ORDER BY total_turnover DESC
+LIMIT 5;
+
+7. Активность клиента по количеству операций за последние 90 дней
+SELECT
+    c.client_id,
+    c.full_name,
+    COUNT(t.transaction_id) AS txn_count,
+    CASE
+        WHEN COUNT(t.transaction_id) = 0 THEN 'inactive'
+        WHEN COUNT(t.transaction_id) BETWEEN 1 AND 5 THEN 'low'
+        WHEN COUNT(t.transaction_id) BETWEEN 6 AND 20 THEN 'medium'
+        ELSE 'high'
+    END AS activity_level
+FROM clients c
+LEFT JOIN accounts a ON a.client_id = c.client_id
+LEFT JOIN transactions t
+    ON t.account_id = a.account_id
+   AND t.txn_date >= NOW() - INTERVAL '90 days'
+GROUP BY c.client_id, c.full_name;
+
+8. Кредиты, по которым сумма успешных платежей < 50% от principal
+SELECT
+    l.loan_id,
+    l.client_id,
+    l.principal,
+    COALESCE(SUM(lp.amount), 0) AS paid_amount
+FROM loans l
+LEFT JOIN loan_payments lp
+    ON lp.loan_id = l.loan_id
+   AND lp.status = 'success'
+GROUP BY l.loan_id, l.client_id, l.principal
+HAVING COALESCE(SUM(lp.amount), 0) < l.principal * 0.5;
+
+9. Все активные карты и кому они принадлежат
+
+(ФИО, account_id, срок действия)
+
+SELECT
+    c.full_name,
+    a.account_id,
+    cd.card_id,
+    cd.card_type,
+    cd.expires_at
+FROM cards cd
+JOIN accounts a ON a.account_id = cd.account_id
+JOIN clients c ON c.client_id = a.client_id
+WHERE cd.status = 'active';
+
+10. Для каждого счета: количество операций и сумму списаний
+
+(списания = withdrawal + transfer_out + fee)
+
+SELECT
+    a.account_id,
+    COUNT(t.transaction_id) AS total_txn_count,
+    COALESCE(
+        SUM(
+            CASE
+                WHEN t.txn_type IN ('withdrawal', 'transfer_out', 'fee')
+                THEN t.amount
+                ELSE 0
+            END
+        ),
+        0
+    ) AS total_outgoing_amount
+FROM accounts a
+LEFT JOIN transactions t ON t.account_id = a.account_id
+GROUP BY a.account_id
+ORDER BY a.account_id;
