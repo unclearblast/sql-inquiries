@@ -1,6 +1,9 @@
 # sql-inquiries
+
 BMSTU X SPUTNIK 1440 TRAINING PROGRAM
+
 HERE IS ANOTHER SWEET SQL-TASK SOLUTION. HERE IS THE CODE OF DATABASE:
+
 CREATE TABLE clients ( client_id SERIAL PRIMARY KEY, full_name VARCHAR(120) NOT NULL, phone VARCHAR(30) UNIQUE, email VARCHAR(120) UNIQUE, created_at DATE NOT NULL );
 CREATE TABLE accounts ( account_id SERIAL PRIMARY KEY, client_id INT NOT NULL REFERENCES clients(client_id), account_type VARCHAR(20) NOT NULL CHECK (account_type IN ('debit', 'savings', 'credit')), currency CHAR(3) NOT NULL, opened_at DATE NOT NULL, status VARCHAR(20) NOT NULL CHECK (status IN ('active', 'blocked', 'closed')) );
 CREATE TABLE cards ( card_id SERIAL PRIMARY KEY, account_id INT NOT NULL REFERENCES accounts(account_id), card_type VARCHAR(20) NOT NULL CHECK (card_type IN ('debit', 'credit', 'virtual')), issued_at DATE NOT NULL, expires_at DATE NOT NULL, status VARCHAR(20) NOT NULL CHECK (status IN ('active', 'blocked', 'expired')) );
